@@ -1,14 +1,15 @@
-// src/lib/hooks/useWhiteboard.ts
+// src/hooks/useWhiteboard.ts
+
 import { useState, useCallback, useEffect } from 'react';
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { type DrawingTool, type Stroke, type Point } from '../types';
+import { type DrawingTool, type Stroke, type Point } from '@/lib/types';
 import { 
   DEFAULT_COLOR, 
   DEFAULT_STROKE_WIDTH,
   TOOL_SHORTCUTS 
-} from '../constants';
-import { useWebSocket } from './useWebSocket';
+} from '@/lib/constants';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface WhiteboardState {
   strokes: Stroke[];
