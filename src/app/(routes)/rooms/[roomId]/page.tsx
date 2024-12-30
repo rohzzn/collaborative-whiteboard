@@ -14,14 +14,16 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { use } from 'react';
 
-interface RoomPageProps {
-  params: {
-    roomId: string;
-  };
+interface PageProps {
+  params: Promise<{ roomId: string }>;
 }
 
-export default function RoomPage({ params: { roomId } }: RoomPageProps) {
+export default function RoomPage(props: PageProps) {
+  // Unwrap the params using React.use
+  const { roomId } = use(props.params);
+  
   const { users, isConnecting, error } = useRoom(roomId);
   const {
     tool,
