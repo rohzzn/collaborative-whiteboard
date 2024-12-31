@@ -1,7 +1,6 @@
 // server.ts
 import { Server, Socket } from 'socket.io';
 
-// Interfaces
 interface Point {
   x: number;
   y: number;
@@ -34,7 +33,6 @@ interface Room {
   updatedAt: Date;
 }
 
-// Initialize server
 const io = new Server(3001, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
@@ -45,10 +43,8 @@ const io = new Server(3001, {
   },
 });
 
-// Store rooms in memory
 const rooms = new Map<string, Room>();
 
-// Utility function to generate random color
 const getRandomColor = () => {
   const letters = '0123456789ABCDEF';
   let color = '#';
@@ -58,7 +54,6 @@ const getRandomColor = () => {
   return color;
 };
 
-// Handle socket connections
 io.on('connection', (socket: Socket) => {
   console.log('User connected:', socket.id);
 
@@ -71,7 +66,6 @@ io.on('connection', (socket: Socket) => {
     return;
   }
 
-  // Create or join room
   let room = rooms.get(roomId);
   if (!room) {
     room = {
@@ -83,10 +77,11 @@ io.on('connection', (socket: Socket) => {
       updatedAt: new Date(),
     };
     rooms.set(roomId, room);
-    console.log(`Created new room: ${roomId}`);
   }
 
-  // Add user to room
+  // Remove existing user with same name
+  room.users = room.users.filter(u => u.name !== userName);
+
   const user: User = {
     id: socket.id,
     name: userName,
@@ -98,46 +93,68 @@ io.on('connection', (socket: Socket) => {
   room.users.push(user);
   socket.join(roomId);
 
-  // Send initial state
   socket.emit('room_state', room);
-  socket.to(roomId).emit('user_joined', user);
-  console.log(`User ${userName} (${socket.id}) joined room ${roomId}`);
+  io.to(roomId).emit('user_joined', user);
 
-  // Handle strokes
-  socket.on('stroke_added', (stroke: Stroke) => {
-    const currentRoom = rooms.get(roomId);
-    if (currentRoom) {
-      currentRoom.strokes.push(stroke);
-      currentRoom.updatedAt = new Date();
-      socket.to(roomId).emit('stroke_added', stroke);
+  socket.on('stroke_started', (stroke: Stroke) => {
+    if (room) {
+      socket.to(roomId).emit('stroke_started', stroke);
     }
   });
 
-  // Handle clear canvas
+  socket.on('stroke_updated', (stroke: Stroke) => {
+    if (room) {
+      socket.to(roomId).emit('stroke_updated', stroke);
+    }
+  });
+
+  socket.on('stroke_completed', (stroke: Stroke) => {
+    if (room) {
+      room.strokes.push(stroke);
+      socket.to(roomId).emit('stroke_completed', stroke);
+    }
+  });
+
   socket.on('clear_canvas', () => {
-    const currentRoom = rooms.get(roomId);
-    if (currentRoom) {
-      currentRoom.strokes = [];
-      currentRoom.updatedAt = new Date();
-      socket.to(roomId).emit('strokes_cleared');
+    if (room) {
+      room.strokes = [];
+      socket.to(roomId).emit('canvas_cleared');
     }
   });
 
-  // Handle disconnect
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-    
-    const currentRoom = rooms.get(roomId);
-    if (currentRoom) {
-      currentRoom.users = currentRoom.users.filter(u => u.id !== socket.id);
-      socket.to(roomId).emit('user_left', socket.id);
-
-      if (currentRoom.users.length === 0) {
+    if (room) {
+      room.users = room.users.filter(u => u.id !== socket.id);
+      io.to(roomId).emit('user_left', socket.id);
+      
+      if (room.users.length === 0) {
         rooms.delete(roomId);
-        console.log(`Room ${roomId} deleted as it became empty`);
       }
     }
   });
 });
 
 console.log('WebSocket server running on port 3001');
+
+// src/hooks/useWhiteboard.ts - The fixed stroke functions:
+
+const startStroke = (point: Point) => {
+  const stroke = store.startStroke(point);
+  if (stroke && socket) {
+    socket.emit('stroke_started', stroke);
+  }
+};
+
+const updateStroke = (point: Point) => {
+  const updatedStroke = store.updateStroke(point);
+  if (updatedStroke && socket) {
+    socket.emit('stroke_updated', updatedStroke);
+  }
+};
+
+const endStroke = () => {
+  const completedStroke = store.endStroke();
+  if (completedStroke && socket) {
+    socket.emit('stroke_completed', completedStroke);
+  }
+};

@@ -1,11 +1,10 @@
 // src/hooks/useWhiteboard.ts
-
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { DrawingTool, Stroke, Point } from '@/types';
-import { DEFAULT_COLOR, DEFAULT_STROKE_WIDTH, TOOL_SHORTCUTS } from '@/lib/constants';
-import useWebSocket from '@/hooks/useWebSocket';  // Fixed import path
+import { DEFAULT_COLOR, DEFAULT_STROKE_WIDTH } from '@/lib/constants';
+import useWebSocket from './useWebSocket';
 
 interface WhiteboardState {
   strokes: Stroke[];
@@ -47,41 +46,42 @@ const useWhiteboardStore = create<WhiteboardStore>((set, get) => ({
 
   startStroke: (point) => {
     const { tool, color, strokeWidth } = get();
-    const newStroke: Stroke = {
+    const stroke: Stroke = {
       id: uuidv4(),
-      type: tool,
+      type: tool === 'eraser' ? 'eraser' : tool,
       points: [point],
-      color,
-      width: strokeWidth
+      color: tool === 'eraser' ? '#FFFFFF' : color,
+      width: tool === 'eraser' ? strokeWidth * 2 : strokeWidth,
     };
-    set({ currentStroke: newStroke, isDrawing: true });
+    set({ currentStroke: stroke, isDrawing: true });
+    return stroke;
   },
 
   updateStroke: (point) => {
     const { currentStroke, isDrawing } = get();
-    if (!isDrawing || !currentStroke) return;
+    if (!isDrawing || !currentStroke) return null;
 
     const updatedStroke = {
       ...currentStroke,
-      points: [...currentStroke.points, point]
+      points: [...currentStroke.points, point],
     };
     set({ currentStroke: updatedStroke });
+    return updatedStroke;
   },
 
   endStroke: () => {
     const { currentStroke, strokes } = get();
     if (!currentStroke) return null;
 
-    const completedStroke = { ...currentStroke };
     set({
-      strokes: [...strokes, completedStroke],
+      strokes: [...strokes, currentStroke],
       currentStroke: null,
       isDrawing: false,
       undoStack: [],
-      redoStack: []
+      redoStack: [],
     });
 
-    return completedStroke;
+    return currentStroke;
   },
 
   addStroke: (stroke) => {
@@ -96,7 +96,7 @@ const useWhiteboardStore = create<WhiteboardStore>((set, get) => ({
     const lastStroke = strokes[strokes.length - 1];
     set({
       strokes: strokes.slice(0, -1),
-      undoStack: [...undoStack, lastStroke]
+      undoStack: [...undoStack, lastStroke],
     });
   },
 
@@ -107,7 +107,7 @@ const useWhiteboardStore = create<WhiteboardStore>((set, get) => ({
     const strokeToRedo = undoStack[undoStack.length - 1];
     set({
       strokes: [...strokes, strokeToRedo],
-      undoStack: undoStack.slice(0, -1)
+      undoStack: undoStack.slice(0, -1),
     });
   },
 
@@ -115,69 +115,49 @@ const useWhiteboardStore = create<WhiteboardStore>((set, get) => ({
     strokes: [],
     currentStroke: null,
     undoStack: [],
-    redoStack: []
-  })
+    redoStack: [],
+  }),
 }));
 
 const useWhiteboard = (roomId: string) => {
-  const socket = useWebSocket(roomId, '');  // Pass empty string as userName since it's optional
+  const socket = useWebSocket(roomId, '');
   const store = useWhiteboardStore();
 
-  // Handle keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'z') {
-          e.preventDefault();
-          if (e.shiftKey) {
-            store.redo();
-          } else {
-            store.undo();
-          }
-        }
-      } else {
-        const tool = TOOL_SHORTCUTS[e.key.toLowerCase() as keyof typeof TOOL_SHORTCUTS];
-        if (tool) {
-          store.setTool(tool);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [store]);
-
-  // Sync with other users
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('stroke_added', (stroke: Stroke) => {
+    const handleStrokeAdded = (stroke: Stroke) => {
       console.log('Received stroke:', stroke);
       store.addStroke(stroke);
-    });
+    };
 
-    socket.on('strokes_cleared', () => {
-      store.clear();
-    });
+    socket.on('stroke_added', handleStrokeAdded);
+    socket.on('strokes_cleared', store.clear);
 
     return () => {
-      socket.off('stroke_added');
+      socket.off('stroke_added', handleStrokeAdded);
       socket.off('strokes_cleared');
     };
   }, [socket, store]);
 
   const startStroke = (point: Point) => {
-    store.startStroke(point);
+    const stroke = store.startStroke(point);
+    if (stroke && socket) {
+      socket.emit('stroke_added', stroke);
+    }
   };
 
   const updateStroke = (point: Point) => {
-    store.updateStroke(point);
+    const updatedStroke = store.updateStroke(point);
+    if (updatedStroke && socket) {
+      socket.emit('stroke_updated', updatedStroke);
+    }
   };
 
   const endStroke = () => {
     const completedStroke = store.endStroke();
     if (completedStroke && socket) {
-      socket.emit('stroke_added', completedStroke);
+      socket.emit('stroke_completed', completedStroke);
     }
   };
 
