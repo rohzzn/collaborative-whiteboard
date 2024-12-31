@@ -56,58 +56,72 @@ io.on('connection', (socket) => {
   room.users.push(user);
   socket.join(roomId);
 
-  // Notify other users
-  socket.to(roomId).emit('user_joined', user);
+  // Notify all users in room (including sender) about the new user
+  io.to(roomId).emit('user_joined', user);
 
   // Send current room state to the new user
-  console.log('Sending room state:', room);
   socket.emit('room_state', room);
 
   // Handle drawing events
   socket.on('stroke_started', (stroke: Stroke) => {
-    console.log('Stroke started:', stroke);
     if (!room) return;
+
+    // Add stroke to room state
     room.strokes.push(stroke);
-    socket.to(roomId).emit('stroke_started', stroke);
+
+    // Broadcast to all clients in room immediately
+    io.to(roomId).emit('stroke_started', stroke);
   });
 
   socket.on('stroke_updated', (stroke: Stroke) => {
-    console.log('Stroke updated:', stroke);
     if (!room) return;
+
+    // Update stroke in room state
     const index = room.strokes.findIndex(s => s.id === stroke.id);
     if (index !== -1) {
       room.strokes[index] = stroke;
     }
-    socket.to(roomId).emit('stroke_updated', stroke);
+
+    // Broadcast the update to all clients in room
+    io.to(roomId).emit('stroke_updated', stroke);
   });
 
   socket.on('stroke_completed', (stroke: Stroke) => {
-    console.log('Stroke completed:', stroke);
     if (!room) return;
+
+    // Update or add completed stroke
     const index = room.strokes.findIndex(s => s.id === stroke.id);
     if (index !== -1) {
       room.strokes[index] = stroke;
     } else {
       room.strokes.push(stroke);
     }
-    socket.to(roomId).emit('stroke_completed', stroke);
+
+    // Broadcast to all clients
+    io.to(roomId).emit('stroke_completed', stroke);
   });
 
   socket.on('clear_canvas', () => {
-    console.log('Canvas cleared');
     if (!room) return;
+    
+    // Clear room strokes
     room.strokes = [];
-    socket.to(roomId).emit('canvas_cleared');
+    
+    // Broadcast canvas clear to all clients in room
+    io.to(roomId).emit('canvas_cleared');
   });
 
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
     if (!room) return;
     
+    // Remove user from room
     room.users = room.users.filter(u => u.id !== socket.id);
-    io.to(roomId).emit('room_state', room);
-    socket.to(roomId).emit('user_left', socket.id);
     
+    // Notify all remaining users
+    io.to(roomId).emit('user_left', socket.id);
+    io.to(roomId).emit('room_state', room);
+    
+    // Remove room if empty
     if (room.users.length === 0) {
       rooms.delete(roomId);
     }
