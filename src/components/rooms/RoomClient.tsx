@@ -60,12 +60,11 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
   const handleStrokeUpdate = (point: Point) => {
     updateStroke(point);
   };
-
-  const handleStrokeComplete = (points: Point[]) => {
+  const handleStrokeComplete = (points: ReadonlyArray<Point>) => {
     console.log('Stroke completed');
     endStroke();
   };
-
+  
   const handleExport = () => {
     const canvas = document.querySelector('canvas');
     if (!canvas) return;
