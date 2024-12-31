@@ -1,17 +1,20 @@
 // src/app/(routes)/rooms/[roomId]/page.tsx
 
 import React from 'react';
-import RoomClient from '@/components/rooms/RoomClient';
+import dynamic from 'next/dynamic';
+import { use } from 'react';
 
-interface Params {
-  roomId: string;
-}
+// Dynamically import RoomClient with no SSR
+const RoomClient = dynamic(() => import('@/components/rooms/RoomClient'), {
+  ssr: false
+});
 
 interface PageProps {
-  params: Promise<Params>; // Define params as a Promise
+  params: Promise<{ roomId: string }>;
 }
 
-export default async function Page({ params }: PageProps) {
-  const { roomId } = await params; // Await the Promise to get roomId
-  return <RoomClient roomId={roomId} />;
+export default function Page({ params }: PageProps) {
+  // Unwrap the Promise using React.use
+  const resolvedParams = use(params);
+  return <RoomClient roomId={resolvedParams.roomId} />;
 }

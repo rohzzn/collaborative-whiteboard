@@ -1,15 +1,22 @@
 // src/components/whiteboard/Canvas.tsx
-
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { getStroke } from 'perfect-freehand';
-import { getSvgPathFromStroke } from '@/lib/utils/canvas';
-import { Point } from '@/types'; // Import Point type
+
+// Define types
+type DrawingTool = 'pencil' | 'rectangle' | 'circle' | 'text' | 'arrow' | 'eraser';
+
+interface Point {
+  x: number;
+  y: number;
+  pressure?: number;
+}
 
 interface CanvasProps {
-  tool: string;
+  tool: DrawingTool;
   color: string;
   strokeWidth: number;
+  onStrokeStart?: (point: Point) => void;
+  onStrokeUpdate?: (point: Point) => void;
   onStrokeComplete?: (points: Point[]) => void;
 }
 
@@ -17,13 +24,16 @@ const Canvas: React.FC<CanvasProps> = ({
   tool,
   color,
   strokeWidth,
+  onStrokeStart,
+  onStrokeUpdate,
   onStrokeComplete
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
-  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [context, setContext] = useState<CanvasRenderingContext2D | null>(null);
 
+  // Initialize canvas context
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -31,85 +41,118 @@ const Canvas: React.FC<CanvasProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set up canvas
-    ctx.strokeStyle = color;
-    ctx.lineWidth = strokeWidth;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Handle window resize
+    setContext(ctx);
+    
     const handleResize = () => {
-      const { width, height } = canvas.getBoundingClientRect();
-      canvas.width = width;
-      canvas.height = height;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      
+      // Reset context properties after resize
+      ctx.strokeStyle = color;
+      ctx.lineWidth = strokeWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
     };
 
     handleResize();
     window.addEventListener('resize', handleResize);
 
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
   }, [color, strokeWidth]);
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Update context properties when they change
+  useEffect(() => {
+    if (!context) return;
+    context.strokeStyle = color;
+    context.lineWidth = strokeWidth;
+  }, [context, color, strokeWidth]);
+
+  const getCanvasPoint = useCallback((e: React.MouseEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) throw new Error('Canvas not initialized');
 
     const rect = canvas.getBoundingClientRect();
-    const point: Point = {
+    return {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
       pressure: 0.5,
     };
+  }, []);
 
+  const startDrawing = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!context) return;
+
+    const point = getCanvasPoint(e);
     setIsDrawing(true);
     setCurrentPoints([point]);
-  };
+    
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+    
+    onStrokeStart?.(point);
+  }, [context, getCanvasPoint, onStrokeStart]);
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !canvasRef.current) return;
+  const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !context) return;
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const point: Point = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-      pressure: 0.5,
-    };
+    const point = getCanvasPoint(e);
+    setCurrentPoints(prev => [...prev, point]);
+    
+    switch (tool) {
+      case 'pencil':
+      case 'eraser':
+        context.lineTo(point.x, point.y);
+        context.stroke();
+        break;
+        
+      case 'rectangle':
+        // Clear and redraw for shape preview
+        const startPoint = currentPoints[0];
+        context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+        context.beginPath();
+        context.rect(
+          startPoint.x,
+          startPoint.y,
+          point.x - startPoint.x,
+          point.y - startPoint.y
+        );
+        context.stroke();
+        break;
+        
+      case 'circle':
+        const center = currentPoints[0];
+        const radius = Math.sqrt(
+          Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
+        );
+        context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+        context.beginPath();
+        context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+        context.stroke();
+        break;
+    }
+    
+    onStrokeUpdate?.(point);
+  }, [isDrawing, context, tool, currentPoints, getCanvasPoint, onStrokeUpdate]);
 
-    const updatedPoints = [...currentPoints, point];
-    setCurrentPoints(updatedPoints);
-
-    // Get stroke outline
-    const outline = getStroke(updatedPoints, {
-      size: strokeWidth,
-      thinning: 0.5,
-      smoothing: 0.5,
-      streamline: 0.5,
-    });
-
-    // Convert to SVG path
-    const pathData = getSvgPathFromStroke(updatedPoints);
-    setCurrentPath(pathData);
-
-    // Draw on canvas
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fill(new Path2D(pathData));
-  };
-
-  const stopDrawing = () => {
+  const stopDrawing = useCallback(() => {
     if (!isDrawing) return;
 
     setIsDrawing(false);
-    onStrokeComplete?.(currentPoints);
+    if (currentPoints.length > 0) {
+      onStrokeComplete?.(currentPoints);
+    }
     setCurrentPoints([]);
-    setCurrentPath(null);
-  };
+
+    if (context) {
+      context.closePath();
+    }
+  }, [isDrawing, currentPoints, context, onStrokeComplete]);
 
   return (
-    <motion.div
+    <motion.div 
       className="relative w-full h-full"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -123,19 +166,6 @@ const Canvas: React.FC<CanvasProps> = ({
         onMouseUp={stopDrawing}
         onMouseLeave={stopDrawing}
       />
-      {currentPath && (
-        <svg
-          className="absolute inset-0 pointer-events-none"
-          style={{ width: '100%', height: '100%' }}
-        >
-          <path
-            d={currentPath}
-            fill={color}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      )}
     </motion.div>
   );
 };

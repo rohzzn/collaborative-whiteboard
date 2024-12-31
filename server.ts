@@ -1,31 +1,22 @@
 // server.ts
-
 import { Server, Socket } from 'socket.io';
-// Initialize Socket.io server on port 3001 with CORS settings
-const io = new Server(3001, {
-  cors: {
-    origin: 'http://localhost:3000', // Frontend origin
-    methods: ['GET', 'POST'],
-  },
-});
 
-// Define Point type
+// Interfaces
 interface Point {
   x: number;
   y: number;
   pressure?: number;
 }
 
-// Define Stroke type
 interface Stroke {
   id: string;
-  type: string;
+  type: 'pencil' | 'rectangle' | 'circle' | 'text' | 'arrow' | 'eraser';
   points: Point[];
   color: string;
   width: number;
+  text?: string;
 }
 
-// Define User type
 interface User {
   id: string;
   name: string;
@@ -34,7 +25,6 @@ interface User {
   lastSeen: Date;
 }
 
-// Define Room type
 interface Room {
   id: string;
   name: string;
@@ -44,104 +34,110 @@ interface Room {
   updatedAt: Date;
 }
 
-// In-memory store for rooms
-const rooms: Record<string, Room> = {};
+// Initialize server
+const io = new Server(3001, {
+  cors: {
+    origin: process.env.NODE_ENV === 'production' 
+      ? 'https://your-production-url.com' 
+      : 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
+// Store rooms in memory
+const rooms = new Map<string, Room>();
 
 // Utility function to generate random color
-function getRandomColor(): string {
+const getRandomColor = () => {
   const letters = '0123456789ABCDEF';
   let color = '#';
   for (let i = 0; i < 6; i++) {
     color += letters[Math.floor(Math.random() * 16)];
   }
   return color;
-}
+};
 
-// Handle client connections
+// Handle socket connections
 io.on('connection', (socket: Socket) => {
-  console.log(`User connected: ${socket.id}`);
+  console.log('User connected:', socket.id);
 
-  // Extract roomId and userName from query
-  const roomIdParam = socket.handshake.query.roomId;
-  const userNameParam = socket.handshake.query.userName;
+  const roomId = socket.handshake.query.roomId as string;
+  const userName = socket.handshake.query.userName as string || `User-${socket.id.slice(0, 5)}`;
 
-  if (typeof roomIdParam !== 'string') {
-    console.error(`User ${socket.id} did not provide a valid roomId`);
+  if (!roomId) {
+    console.error('No room ID provided');
     socket.disconnect();
     return;
   }
 
-  const roomId = roomIdParam;
-
-  // Get or create the room
-  if (!rooms[roomId]) {
-    rooms[roomId] = {
+  // Create or join room
+  let room = rooms.get(roomId);
+  if (!room) {
+    room = {
       id: roomId,
-      name: `Room ${roomId.substring(0, 8)}`,
+      name: `Room ${roomId.slice(0, 8)}`,
       users: [],
       strokes: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+    rooms.set(roomId, room);
+    console.log(`Created new room: ${roomId}`);
   }
 
-  const room = rooms[roomId];
-
-  // Get userName
-  const userName = typeof userNameParam === 'string' && userNameParam.trim() !== '' ? userNameParam : `User-${socket.id.substring(0, 5)}`;
-
-  // Assign a color to the user
-  const userColor = getRandomColor();
-
+  // Add user to room
   const user: User = {
     id: socket.id,
     name: userName,
-    color: userColor,
+    color: getRandomColor(),
     isActive: true,
     lastSeen: new Date(),
   };
 
-  // Add user to room
   room.users.push(user);
   socket.join(roomId);
-  console.log(`User ${socket.id} joined room ${roomId}`);
 
-  // Emit 'room_state' to the connecting client
+  // Send initial state
   socket.emit('room_state', room);
-
-  // Emit 'user_joined' to other clients in the room
   socket.to(roomId).emit('user_joined', user);
+  console.log(`User ${userName} (${socket.id}) joined room ${roomId}`);
 
-  // Handle 'stroke_added' events from clients
+  // Handle strokes
   socket.on('stroke_added', (stroke: Stroke) => {
-    // Add stroke to room
-    room.strokes.push(stroke);
-    room.updatedAt = new Date();
-
-    // Broadcast the stroke to all other clients in the same room
-    socket.to(roomId).emit('stroke_added', stroke);
+    const currentRoom = rooms.get(roomId);
+    if (currentRoom) {
+      currentRoom.strokes.push(stroke);
+      currentRoom.updatedAt = new Date();
+      socket.to(roomId).emit('stroke_added', stroke);
+    }
   });
 
-  // Handle client disconnections
-  socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
-
-    // Remove user from room
-    const userIndex = room.users.findIndex(u => u.id === socket.id);
-    if (userIndex !== -1) {
-      const [leftUser] = room.users.splice(userIndex, 1);
-
-      // Emit 'user_left' to other clients in the room
-      socket.to(roomId).emit('user_left', leftUser.id);
-
-      // Emit updated 'room_state'
-      io.to(roomId).emit('room_state', room);
+  // Handle clear canvas
+  socket.on('clear_canvas', () => {
+    const currentRoom = rooms.get(roomId);
+    if (currentRoom) {
+      currentRoom.strokes = [];
+      currentRoom.updatedAt = new Date();
+      socket.to(roomId).emit('strokes_cleared');
     }
+  });
 
-    // If room is empty, delete it
-    if (room.users.length === 0) {
-      delete rooms[roomId];
-      console.log(`Room ${roomId} deleted as it became empty.`);
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+    
+    const currentRoom = rooms.get(roomId);
+    if (currentRoom) {
+      currentRoom.users = currentRoom.users.filter(u => u.id !== socket.id);
+      socket.to(roomId).emit('user_left', socket.id);
+
+      if (currentRoom.users.length === 0) {
+        rooms.delete(roomId);
+        console.log(`Room ${roomId} deleted as it became empty`);
+      }
     }
   });
 });
+
+console.log('WebSocket server running on port 3001');

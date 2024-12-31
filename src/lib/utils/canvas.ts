@@ -1,20 +1,24 @@
 // src/lib/utils/canvas.ts
 
-import { Point } from '@/types'; // Import Point type
+// Helper function to convert perfect-freehand points to SVG path
+export function getSvgPathFromStroke(points: number[][]): string {
+  if (!points.length) return '';
 
-export function getSvgPathFromStroke(stroke: Point[]): string {
-  if (!stroke.length) return '';
-
-  const d = stroke.reduce(
-    (acc, point, i, arr) => {
-      const nextPoint = arr[i + 1];
-      if (!nextPoint) return acc;
-      acc.push(point.x, point.y, (point.x + nextPoint.x) / 2, (point.y + nextPoint.y) / 2);
-      return acc;
+  const d = points.reduce(
+    (acc, [x0, y0], i, arr) => {
+      if (i === 0) return `M ${x0},${y0}`;
+      
+      const [x1, y1] = arr[(i + 1) % arr.length];
+      const [x2, y2] = arr[(i + 2) % arr.length];
+      
+      if (i === arr.length - 1) {
+        return `${acc} L ${x1},${y1}`;
+      }
+      
+      return `${acc} L ${x1},${y1} Q ${x2},${y2}`;
     },
-    ['M', stroke[0].x, stroke[0].y, 'Q']
+    ''
   );
 
-  d.push('Z');
-  return d.join(' ');
+  return `${d} Z`;
 }

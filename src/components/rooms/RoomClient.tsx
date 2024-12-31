@@ -1,11 +1,11 @@
 // src/components/rooms/RoomClient.tsx
-
 'use client';
 
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import useRoom from '@/hooks/useRoom';
 import useWhiteboard from '@/hooks/useWhiteboard';
+import useUser from '@/hooks/useUser';
 import Canvas from '@/components/whiteboard/Canvas';
 import Toolbar from '@/components/whiteboard/Toolbar';
 import {
@@ -16,21 +16,16 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Point } from '@/types'; // Import Point type
-import useUser from '@/hooks/useUser'; // Import the user store
+import type { Point } from '@/types';
 
 interface RoomClientProps {
   roomId: string;
 }
 
 const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
-  const { name: userName } = useUser(); // Retrieve userName from the store
-  const { users, isConnecting, error } = useRoom(roomId, userName);
+  const { name: userName } = useUser();
+  const { users, isConnecting, error } = useRoom(roomId, userName || 'Anonymous');
   const {
-    strokes,
-    startStroke,
-    updateStroke,
-    endStroke,
     tool,
     color,
     strokeWidth,
@@ -39,23 +34,40 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
     setTool,
     setColor,
     setStrokeWidth,
+    startStroke,
+    updateStroke,
+    endStroke,
     undo,
     redo,
-    clear,
   } = useWhiteboard(roomId);
 
   useEffect(() => {
-    // Log strokes whenever they change
-    console.log('Strokes updated:', strokes);
-  }, [strokes]);
+    // Log connection status for debugging
+    console.log('Connection status:', {
+      roomId,
+      userName,
+      isConnecting,
+      error,
+      usersCount: users.length
+    });
+  }, [roomId, userName, isConnecting, error, users]);
+
+  const handleStrokeStart = (point: Point) => {
+    console.log('Stroke started');
+    startStroke(point);
+  };
+
+  const handleStrokeUpdate = (point: Point) => {
+    updateStroke(point);
+  };
 
   const handleStrokeComplete = (points: Point[]) => {
-    if (points.length < 2) return;
+    console.log('Stroke completed');
     endStroke();
   };
 
   const handleExport = () => {
-    const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
+    const canvas = document.querySelector('canvas');
     if (!canvas) return;
 
     const dataUrl = canvas.toDataURL('image/png');
@@ -68,12 +80,8 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
   const handleShare = () => {
     const url = window.location.href;
     navigator.clipboard.writeText(url).then(
-      () => {
-        alert('Room URL copied to clipboard!');
-      },
-      () => {
-        alert('Failed to copy URL.');
-      }
+      () => alert('Room URL copied to clipboard!'),
+      () => alert('Failed to copy URL.')
     );
   };
 
@@ -98,6 +106,10 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
             <CardTitle>Connecting...</CardTitle>
             <CardDescription>
               Establishing connection to the whiteboard room...
+              <br />
+              Room ID: {roomId}
+              <br />
+              User Name: {userName || 'Anonymous'}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -138,6 +150,8 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
               tool={tool}
               color={color}
               strokeWidth={strokeWidth}
+              onStrokeStart={handleStrokeStart}
+              onStrokeUpdate={handleStrokeUpdate}
               onStrokeComplete={handleStrokeComplete}
             />
           </motion.div>

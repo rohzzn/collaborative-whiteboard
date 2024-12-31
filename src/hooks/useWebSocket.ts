@@ -1,39 +1,68 @@
 // src/hooks/useWebSocket.ts
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-export const useWebSocket = (roomId: string, userName: string): Socket | null => {
-  const [socket, setSocket] = useState<Socket | null>(null);
+const SOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3001';
+
+export const useWebSocket = (roomId: string, userName: string) => {
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const SOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3001';
+    if (!roomId) {
+      console.error('No room ID provided');
+      return;
+    }
 
-    const socketIo = io(SOCKET_URL, {
-      query: { roomId, userName },
-      transports: ['websocket'], // Use WebSocket only
+    console.log('Initializing WebSocket:', {
+      url: SOCKET_URL,
+      roomId,
+      userName
     });
 
-    setSocket(socketIo);
-
-    socketIo.on('connect', () => {
-      console.log('Connected to WebSocket server');
+    // Create socket instance
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket'],
+      query: {
+        roomId,
+        userName
+      },
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 10000
     });
 
-    socketIo.on('disconnect', () => {
-      console.log('Disconnected from WebSocket server');
+    // Connection event handlers
+    socket.on('connect', () => {
+      console.log('Socket connected:', socket.id);
     });
 
-    socketIo.on('connect_error', (error: Error) => {
-      console.error('WebSocket connection error:', error);
+    socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
     });
 
+    socket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+    });
+
+    socket.on('error', (error: Error) => {
+      console.error('Socket error:', error);
+    });
+
+    // Store socket reference
+    socketRef.current = socket;
+
+    // Cleanup on unmount
     return () => {
-      socketIo.disconnect();
+      console.log('Cleaning up socket connection');
+      if (socket) {
+        socket.disconnect();
+        socketRef.current = null;
+      }
     };
   }, [roomId, userName]);
 
-  return socket;
+  return socketRef.current;
 };
 
 export default useWebSocket;
