@@ -1,13 +1,10 @@
+// src/components/whiteboard/Canvas.tsx
+
 import React, { useRef, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { getStroke } from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/lib/utils/canvas';
-
-interface Point {
-  x: number;
-  y: number;
-  pressure?: number;
-}
+import { Point } from '@/lib/types';
 
 interface CanvasProps {
   tool: string;
@@ -16,12 +13,12 @@ interface CanvasProps {
   onStrokeComplete?: (points: Point[]) => void;
 }
 
-export const Canvas = ({ 
-  tool, 
-  color, 
-  strokeWidth, 
-  onStrokeComplete 
-}: CanvasProps) => {
+const Canvas: React.FC<CanvasProps> = ({
+  tool,
+  color,
+  strokeWidth,
+  onStrokeComplete
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
@@ -58,7 +55,7 @@ export const Canvas = ({
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const point = {
+    const point: Point = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
       pressure: 0.5,
@@ -73,16 +70,17 @@ export const Canvas = ({
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const point = {
+    const point: Point = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
       pressure: 0.5,
     };
 
-    setCurrentPoints(prev => [...prev, point]);
+    const updatedPoints = [...currentPoints, point];
+    setCurrentPoints(updatedPoints);
 
     // Get stroke outline
-    const outline = getStroke(currentPoints, {
+    const outline = getStroke(updatedPoints, {
       size: strokeWidth,
       thinning: 0.5,
       smoothing: 0.5,
@@ -90,7 +88,7 @@ export const Canvas = ({
     });
 
     // Convert to SVG path
-    const pathData = getSvgPathFromStroke(outline);
+    const pathData = getSvgPathFromStroke(updatedPoints);
     setCurrentPath(pathData);
 
     // Draw on canvas
@@ -111,7 +109,7 @@ export const Canvas = ({
   };
 
   return (
-    <motion.div 
+    <motion.div
       className="relative w-full h-full"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

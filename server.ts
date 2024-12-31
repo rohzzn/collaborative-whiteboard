@@ -1,9 +1,8 @@
 // server.ts
 
-import { Server } from 'socket.io';
-import cors from 'cors';
+import { Server, Socket } from 'socket.io';
 
-// Initialize Socket.io server
+// Initialize Socket.io server on port 3001 with CORS settings
 const io = new Server(3001, {
   cors: {
     origin: 'http://localhost:3000', // Frontend origin
@@ -11,22 +10,40 @@ const io = new Server(3001, {
   },
 });
 
-// Handle connection
-io.on('connection', (socket) => {
+// Define Stroke type
+interface Stroke {
+  id: string;
+  type: string;
+  points: number[][];
+  color: string;
+  width: number;
+}
+
+// Handle client connections
+io.on('connection', (socket: Socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // Join room based on roomId
-  const { roomId } = socket.handshake.query;
+  // Extract and validate roomId from query parameters
+  const roomIdParam = socket.handshake.query.roomId;
+
+  if (typeof roomIdParam !== 'string') {
+    console.error(`User ${socket.id} did not provide a valid roomId`);
+    socket.disconnect();
+    return;
+  }
+
+  const roomId = roomIdParam;
+
   socket.join(roomId);
   console.log(`User ${socket.id} joined room ${roomId}`);
 
-  // Handle stroke_added event
-  socket.on('stroke_added', (stroke) => {
-    // Broadcast to other users in the room
+  // Handle 'stroke_added' events from clients
+  socket.on('stroke_added', (stroke: Stroke) => {
+    // Broadcast the stroke to all other clients in the same room
     socket.to(roomId).emit('stroke_added', stroke);
   });
 
-  // Handle disconnect
+  // Handle client disconnections
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
   });

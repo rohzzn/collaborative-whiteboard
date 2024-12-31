@@ -2,12 +2,12 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useRoom } from '@/hooks/useRoom';
-import { useWhiteboard } from '@/hooks/useWhiteboard';
-import { Canvas } from '@/components/whiteboard/Canvas';
-import { Toolbar } from '@/components/whiteboard/Toolbar';
+import useRoom from '@/hooks/useRoom';
+import useWhiteboard from '@/hooks/useWhiteboard';
+import Canvas from '@/components/whiteboard/Canvas';
+import Toolbar from '@/components/whiteboard/Toolbar';
 import {
   Card,
   CardContent,
@@ -16,13 +16,13 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Point } from '@/lib/types'; // Ensure Point type is imported
+import { Point } from '@/lib/types';
 
 interface RoomClientProps {
   roomId: string;
 }
 
-export default function RoomClient({ roomId }: RoomClientProps) {
+const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
   const { users, isConnecting, error } = useRoom(roomId);
   const {
     strokes,
@@ -42,19 +42,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     clear,
   } = useWhiteboard(roomId);
 
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-
   useEffect(() => {
     // Log strokes whenever they change
     console.log('Strokes updated:', strokes);
   }, [strokes]);
-
-  useEffect(() => {
-    if (connectionError) {
-      // Handle UI update if needed
-      console.error('WebSocket connection failed:', connectionError);
-    }
-  }, [connectionError]);
 
   const handleStrokeComplete = (points: Point[]) => {
     if (points.length < 2) return;
@@ -176,4 +167,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       </div>
     </TooltipProvider>
   );
-}
+};
+
+export default RoomClient;

@@ -1,14 +1,15 @@
 // src/hooks/useWebSocket.ts
 
 import { useEffect, useState } from 'react';
-import io, { Socket } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
+
+const SOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3001';
 
 export const useWebSocket = (roomId: string): Socket | null => {
   const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
-    // Replace with your actual WebSocket server URL
-    const socketIo = io('http://localhost:3001', {
+    const socketIo = io(SOCKET_URL, {
       query: { roomId },
       transports: ['websocket'], // Use WebSocket only
     });
@@ -23,7 +24,8 @@ export const useWebSocket = (roomId: string): Socket | null => {
       console.log('Disconnected from WebSocket server');
     });
 
-    socketIo.on('connect_error', (error: any) => {
+    // Use the Error type instead of any
+    socketIo.on('connect_error', (error: Error) => {
       console.error('WebSocket connection error:', error);
     });
 
@@ -34,3 +36,5 @@ export const useWebSocket = (roomId: string): Socket | null => {
 
   return socket;
 };
+
+export default useWebSocket;

@@ -30,6 +30,8 @@ export const COLORS = [
 
 export const STROKE_WIDTHS = [1, 2, 4, 6, 8, 12, 16, 24] as const;
 
+// src/lib/constants/index.ts
+
 export const WEBSOCKET_EVENTS = {
   CONNECT: 'connect',
   DISCONNECT: 'disconnect',
