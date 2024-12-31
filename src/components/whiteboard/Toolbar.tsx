@@ -1,3 +1,5 @@
+// src/components/whiteboard/Toolbar.tsx
+
 import React from 'react';
 import { motion } from 'framer-motion';
 import { 
@@ -9,14 +11,15 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { ColorPicker } from './ColorPicker';
+import { DrawingTool } from '@/lib/types';
 
 interface ToolbarProps {
-  tool: string;
+  tool: DrawingTool;
   color: string;
   strokeWidth: number;
   canUndo: boolean;
   canRedo: boolean;
-  onToolChange: (tool: string) => void;
+  onToolChange: (tool: DrawingTool) => void;
   onColorChange: (color: string) => void;
   onStrokeWidthChange: (width: number) => void;
   onUndo: () => void;
@@ -64,7 +67,7 @@ export const Toolbar = ({
                 variant={tool === id ? 'default' : 'ghost'}
                 size="icon"
                 className="w-9 h-9"
-                onClick={() => onToolChange(id)}
+                onClick={() => onToolChange(id as DrawingTool)}
               >
                 <Icon className="h-4 w-4" />
               </Button>

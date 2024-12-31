@@ -1,5 +1,7 @@
+// src/hooks/useRoom.ts
+
 import { useState, useEffect } from 'react';
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocket } from '@/hooks/useWebSocket';
 import type { Room, User } from '@/lib/types';
 import { WEBSOCKET_EVENTS } from '@/lib/constants';
 

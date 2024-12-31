@@ -1,14 +1,10 @@
 // src/hooks/useWhiteboard.ts
 
-import { useState, useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { type DrawingTool, type Stroke, type Point } from '@/lib/types';
-import { 
-  DEFAULT_COLOR, 
-  DEFAULT_STROKE_WIDTH,
-  TOOL_SHORTCUTS 
-} from '@/lib/constants';
+import { DrawingTool, Stroke, Point } from '@/lib/types';
+import { TOOL_SHORTCUTS, DEFAULT_COLOR, DEFAULT_STROKE_WIDTH } from '@/lib/constants';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface WhiteboardState {
@@ -34,7 +30,9 @@ interface WhiteboardActions {
   clear: () => void;
 }
 
-const useWhiteboardStore = create<WhiteboardState & WhiteboardActions>((set, get) => ({
+type WhiteboardStore = WhiteboardState & WhiteboardActions;
+
+const useWhiteboardStore = create<WhiteboardStore>((set, get) => ({
   strokes: [],
   currentStroke: null,
   tool: 'pencil',
@@ -55,7 +53,7 @@ const useWhiteboardStore = create<WhiteboardState & WhiteboardActions>((set, get
       type: tool,
       points: [point],
       color,
-      width: strokeWidth
+      width: strokeWidth,
     };
     set({ currentStroke: newStroke, isDrawing: true });
   },
@@ -64,9 +62,9 @@ const useWhiteboardStore = create<WhiteboardState & WhiteboardActions>((set, get
     const { currentStroke, isDrawing } = get();
     if (!isDrawing || !currentStroke) return;
 
-    const updatedStroke = {
+    const updatedStroke: Stroke = {
       ...currentStroke,
-      points: [...currentStroke.points, point]
+      points: [...currentStroke.points, point],
     };
     set({ currentStroke: updatedStroke });
   },
@@ -79,8 +77,8 @@ const useWhiteboardStore = create<WhiteboardState & WhiteboardActions>((set, get
       strokes: [...strokes, currentStroke],
       currentStroke: null,
       isDrawing: false,
-      undoStack: [],
-      redoStack: []
+      undoStack: [...get().undoStack, currentStroke],
+      redoStack: [],
     });
   },
 
@@ -91,30 +89,51 @@ const useWhiteboardStore = create<WhiteboardState & WhiteboardActions>((set, get
     const lastStroke = strokes[strokes.length - 1];
     set({
       strokes: strokes.slice(0, -1),
-      undoStack: [...undoStack, lastStroke]
+      undoStack: undoStack.slice(0, -1),
+      redoStack: [...get().redoStack, lastStroke],
     });
   },
 
   redo: () => {
-    const { strokes, undoStack } = get();
-    if (undoStack.length === 0) return;
+    const { strokes, redoStack } = get();
+    if (redoStack.length === 0) return;
 
-    const strokeToRedo = undoStack[undoStack.length - 1];
+    const strokeToRedo = redoStack[redoStack.length - 1];
     set({
       strokes: [...strokes, strokeToRedo],
-      undoStack: undoStack.slice(0, -1)
+      redoStack: redoStack.slice(0, -1),
+      undoStack: [...get().undoStack, strokeToRedo],
     });
   },
 
-  clear: () => set({
-    strokes: [],
-    currentStroke: null,
-    undoStack: [],
-    redoStack: []
-  })
+  clear: () =>
+    set({
+      strokes: [],
+      currentStroke: null,
+      undoStack: [],
+      redoStack: [],
+    }),
 }));
 
-export const useWhiteboard = (roomId: string) => {
+interface UseWhiteboardReturn {
+  strokes: Stroke[];
+  startStroke: (point: Point) => void;
+  updateStroke: (point: Point) => void;
+  endStroke: () => void;
+  tool: DrawingTool;
+  color: string;
+  strokeWidth: number;
+  canUndo: boolean;
+  canRedo: boolean;
+  setTool: (tool: DrawingTool) => void;
+  setColor: (color: string) => void;
+  setStrokeWidth: (width: number) => void;
+  undo: () => void;
+  redo: () => void;
+  clear: () => void;
+}
+
+export const useWhiteboard = (roomId: string): UseWhiteboardReturn => {
   const socket = useWebSocket(roomId);
   const store = useWhiteboardStore();
 
@@ -144,21 +163,52 @@ export const useWhiteboard = (roomId: string) => {
 
   // Sync with other users
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) {
+      // Socket is still initializing; do not log an error here.
+      return;
+    }
 
-    socket.on('stroke_added', (stroke: Stroke) => {
-      store.strokes.push(stroke);
-    });
+    const handleStrokeAdded = (stroke: Stroke) => {
+      store.setStrokeWidth(stroke.width);
+      store.setColor(stroke.color);
+      store.setTool(stroke.type);
+      store.startStroke(stroke.points[0]);
+      stroke.points.slice(1).forEach((point) => {
+        store.updateStroke(point);
+      });
+      store.endStroke();
+    };
+
+    const handleConnectError = (error: Error) => {
+      console.error('WebSocket connection error:', error);
+      // Optionally, set an error state here to inform the user.
+    };
+
+    socket.on('stroke_added', handleStrokeAdded);
+    socket.on('connect_error', handleConnectError);
 
     return () => {
-      socket.off('stroke_added');
+      socket.off('stroke_added', handleStrokeAdded);
+      socket.off('connect_error', handleConnectError);
     };
   }, [socket, store]);
 
   return {
-    ...store,
+    strokes: store.strokes,
+    startStroke: store.startStroke,
+    updateStroke: store.updateStroke,
+    endStroke: store.endStroke,
+    tool: store.tool,
+    color: store.color,
+    strokeWidth: store.strokeWidth,
     canUndo: store.strokes.length > 0,
-    canRedo: store.undoStack.length > 0
+    canRedo: store.redoStack.length > 0,
+    setTool: store.setTool,
+    setColor: store.setColor,
+    setStrokeWidth: store.setStrokeWidth,
+    undo: store.undo,
+    redo: store.redo,
+    clear: store.clear,
   };
 };
 

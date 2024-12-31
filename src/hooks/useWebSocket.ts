@@ -1,40 +1,36 @@
-import { useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { WEBSOCKET_EVENTS } from '@/lib/constants';
+// src/hooks/useWebSocket.ts
 
-const SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001';
+import { useEffect, useState } from 'react';
+import io, { Socket } from 'socket.io-client';
 
-export const useWebSocket = (roomId: string) => {
-  const socketRef = useRef<Socket | null>(null);
+export const useWebSocket = (roomId: string): Socket | null => {
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
-    // Create socket connection
-    socketRef.current = io(SOCKET_SERVER_URL, {
+    // Replace with your actual WebSocket server URL
+    const socketIo = io('http://localhost:3001', {
       query: { roomId },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      transports: ['websocket'], // Use WebSocket only
     });
 
-    // Connection event handlers
-    socketRef.current.on(WEBSOCKET_EVENTS.CONNECT, () => {
-      console.log('Connected to socket server');
+    setSocket(socketIo);
+
+    socketIo.on('connect', () => {
+      console.log('Connected to WebSocket server');
     });
 
-    socketRef.current.on(WEBSOCKET_EVENTS.DISCONNECT, () => {
-      console.log('Disconnected from socket server');
+    socketIo.on('disconnect', () => {
+      console.log('Disconnected from WebSocket server');
     });
 
-    // Cleanup on unmount
+    socketIo.on('connect_error', (error: any) => {
+      console.error('WebSocket connection error:', error);
+    });
+
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      socketIo.disconnect();
     };
   }, [roomId]);
 
-  return socketRef.current;
+  return socket;
 };
-
-export default useWebSocket;
