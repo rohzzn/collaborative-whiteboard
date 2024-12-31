@@ -1,20 +1,13 @@
 // src/components/whiteboard/Canvas.tsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-
-// Define types
-type DrawingTool = 'pencil' | 'rectangle' | 'circle' | 'text' | 'arrow' | 'eraser';
-
-interface Point {
-  x: number;
-  y: number;
-  pressure?: number;
-}
+import type { DrawingTool, Point, Stroke } from '@/types';
 
 interface CanvasProps {
   tool: DrawingTool;
   color: string;
   strokeWidth: number;
+  strokes: Stroke[];
   onStrokeStart?: (point: Point) => void;
   onStrokeUpdate?: (point: Point) => void;
   onStrokeComplete?: (points: Point[]) => void;
@@ -24,6 +17,7 @@ const Canvas: React.FC<CanvasProps> = ({
   tool,
   color,
   strokeWidth,
+  strokes,
   onStrokeStart,
   onStrokeUpdate,
   onStrokeComplete
@@ -53,6 +47,9 @@ const Canvas: React.FC<CanvasProps> = ({
       ctx.lineWidth = strokeWidth;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+
+      // Redraw all strokes
+      drawStrokes(ctx, strokes);
     };
 
     handleResize();
@@ -61,7 +58,7 @@ const Canvas: React.FC<CanvasProps> = ({
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [color, strokeWidth]);
+  }, [color, strokeWidth, strokes]);
 
   // Update context properties when they change
   useEffect(() => {
@@ -69,6 +66,31 @@ const Canvas: React.FC<CanvasProps> = ({
     context.strokeStyle = color;
     context.lineWidth = strokeWidth;
   }, [context, color, strokeWidth]);
+
+  // Draw all strokes when they change
+  useEffect(() => {
+    if (!context) return;
+    drawStrokes(context, strokes);
+  }, [strokes]);
+
+  const drawStrokes = (ctx: CanvasRenderingContext2D, strokesToDraw: Stroke[]) => {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    
+    strokesToDraw.forEach(stroke => {
+      ctx.beginPath();
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = stroke.width;
+      
+      const points = stroke.points;
+      if (points.length > 0) {
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+      }
+    });
+  };
 
   const getCanvasPoint = useCallback((e: React.MouseEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current;
@@ -83,17 +105,11 @@ const Canvas: React.FC<CanvasProps> = ({
   }, []);
 
   const startDrawing = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!context) return;
-
     const point = getCanvasPoint(e);
     setIsDrawing(true);
     setCurrentPoints([point]);
-    
-    context.beginPath();
-    context.moveTo(point.x, point.y);
-    
     onStrokeStart?.(point);
-  }, [context, getCanvasPoint, onStrokeStart]);
+  }, [getCanvasPoint, onStrokeStart]);
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !context) return;
@@ -101,41 +117,14 @@ const Canvas: React.FC<CanvasProps> = ({
     const point = getCanvasPoint(e);
     setCurrentPoints(prev => [...prev, point]);
     
-    switch (tool) {
-      case 'pencil':
-      case 'eraser':
-        context.lineTo(point.x, point.y);
-        context.stroke();
-        break;
-        
-      case 'rectangle':
-        // Clear and redraw for shape preview
-        const startPoint = currentPoints[0];
-        context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-        context.beginPath();
-        context.rect(
-          startPoint.x,
-          startPoint.y,
-          point.x - startPoint.x,
-          point.y - startPoint.y
-        );
-        context.stroke();
-        break;
-        
-      case 'circle':
-        const center = currentPoints[0];
-        const radius = Math.sqrt(
-          Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
-        );
-        context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-        context.beginPath();
-        context.arc(center.x, center.y, radius, 0, Math.PI * 2);
-        context.stroke();
-        break;
-    }
+    // Draw current stroke
+    context.beginPath();
+    context.moveTo(currentPoints[currentPoints.length - 1].x, currentPoints[currentPoints.length - 1].y);
+    context.lineTo(point.x, point.y);
+    context.stroke();
     
     onStrokeUpdate?.(point);
-  }, [isDrawing, context, tool, currentPoints, getCanvasPoint, onStrokeUpdate]);
+  }, [isDrawing, context, currentPoints, getCanvasPoint, onStrokeUpdate]);
 
   const stopDrawing = useCallback(() => {
     if (!isDrawing) return;
@@ -145,11 +134,7 @@ const Canvas: React.FC<CanvasProps> = ({
       onStrokeComplete?.(currentPoints);
     }
     setCurrentPoints([]);
-
-    if (context) {
-      context.closePath();
-    }
-  }, [isDrawing, currentPoints, context, onStrokeComplete]);
+  }, [isDrawing, currentPoints, onStrokeComplete]);
 
   return (
     <motion.div 

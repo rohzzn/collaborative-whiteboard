@@ -1,6 +1,6 @@
 // src/components/rooms/RoomClient.tsx
 'use client';
-
+// src/components/rooms/RoomClient.tsx
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import useRoom from '@/hooks/useRoom';
@@ -26,6 +26,7 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
   const { name: userName } = useUser();
   const { users, isConnecting, error } = useRoom(roomId, userName || 'Anonymous');
   const {
+    strokes,
     tool,
     color,
     strokeWidth,
@@ -41,27 +42,15 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
     redo,
   } = useWhiteboard(roomId);
 
-  useEffect(() => {
-    // Log connection status for debugging
-    console.log('Connection status:', {
-      roomId,
-      userName,
-      isConnecting,
-      error,
-      usersCount: users.length
-    });
-  }, [roomId, userName, isConnecting, error, users]);
-
   const handleStrokeStart = (point: Point) => {
-    console.log('Stroke started');
     startStroke(point);
   };
 
   const handleStrokeUpdate = (point: Point) => {
     updateStroke(point);
   };
-  const handleStrokeComplete = (points: ReadonlyArray<Point>) => {
-    console.log('Stroke completed');
+
+  const handleStrokeComplete = () => {
     endStroke();
   };
   
@@ -149,6 +138,7 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
               tool={tool}
               color={color}
               strokeWidth={strokeWidth}
+              strokes={strokes}
               onStrokeStart={handleStrokeStart}
               onStrokeUpdate={handleStrokeUpdate}
               onStrokeComplete={handleStrokeComplete}
