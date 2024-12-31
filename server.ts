@@ -10,11 +10,18 @@ const io = new Server(3001, {
   },
 });
 
+// Define Point type
+interface Point {
+  x: number;
+  y: number;
+  pressure?: number;
+}
+
 // Define Stroke type
 interface Stroke {
   id: string;
   type: string;
-  points: number[][];
+  points: Point[];
   color: string;
   width: number;
 }
@@ -23,7 +30,7 @@ interface Stroke {
 io.on('connection', (socket: Socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // Extract and validate roomId from query parameters
+  // Join room based on roomId
   const roomIdParam = socket.handshake.query.roomId;
 
   if (typeof roomIdParam !== 'string') {
