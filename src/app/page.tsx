@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -9,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -24,12 +24,14 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import useUser from '@/hooks/useUser'; // Import the user store
 
 export default function Home() {
   const router = useRouter();
   const [roomId, setRoomId] = useState('');
   const [userName, setUserName] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+  const { setName } = useUser(); // Destructure setName
 
   const handleCreateRoom = () => {
     const newRoomId = uuidv4();
@@ -40,8 +42,8 @@ export default function Home() {
     e.preventDefault();
     setIsJoining(true);
     
-    // In a real app, you'd validate the room exists first
-    if (roomId) {
+    if (roomId && userName) {
+      setName(userName); // Set the userName in the store
       router.push(`/rooms/${roomId}`);
     }
   };

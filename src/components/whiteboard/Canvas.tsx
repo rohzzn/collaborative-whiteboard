@@ -4,7 +4,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { getStroke } from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/lib/utils/canvas';
-import { Point } from '@/lib/types';
+import { Point } from '@/types'; // Import Point type
 
 interface CanvasProps {
   tool: string;

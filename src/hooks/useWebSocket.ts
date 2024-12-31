@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3001';
-
-export const useWebSocket = (roomId: string): Socket | null => {
+export const useWebSocket = (roomId: string, userName: string): Socket | null => {
   const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
+    const SOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3001';
+
     const socketIo = io(SOCKET_URL, {
-      query: { roomId },
+      query: { roomId, userName },
       transports: ['websocket'], // Use WebSocket only
     });
 
@@ -24,7 +24,6 @@ export const useWebSocket = (roomId: string): Socket | null => {
       console.log('Disconnected from WebSocket server');
     });
 
-    // Use the Error type instead of any
     socketIo.on('connect_error', (error: Error) => {
       console.error('WebSocket connection error:', error);
     });
@@ -32,7 +31,7 @@ export const useWebSocket = (roomId: string): Socket | null => {
     return () => {
       socketIo.disconnect();
     };
-  }, [roomId]);
+  }, [roomId, userName]);
 
   return socket;
 };

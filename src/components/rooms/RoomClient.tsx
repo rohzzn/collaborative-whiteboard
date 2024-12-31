@@ -16,14 +16,16 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Point } from '@/lib/types';
+import { Point } from '@/types'; // Import Point type
+import useUser from '@/hooks/useUser'; // Import the user store
 
 interface RoomClientProps {
   roomId: string;
 }
 
 const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
-  const { users, isConnecting, error } = useRoom(roomId);
+  const { name: userName } = useUser(); // Retrieve userName from the store
+  const { users, isConnecting, error } = useRoom(roomId, userName);
   const {
     strokes,
     startStroke,

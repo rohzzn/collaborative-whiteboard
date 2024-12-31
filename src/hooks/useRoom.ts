@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import useWebSocket from '@/hooks/useWebSocket';
-import type { Room, User } from '@/lib/types';
+import type { Room, User } from '@/types'; // Import Room and User types
 import { WEBSOCKET_EVENTS } from '@/lib/constants';
 
-const useRoom = (roomId: string) => {
-  const socket = useWebSocket(roomId);
+const useRoom = (roomId: string, userName: string) => {
+  const socket = useWebSocket(roomId, userName);
   const [room, setRoom] = useState<Room | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -22,13 +22,14 @@ const useRoom = (roomId: string) => {
       setIsConnecting(false);
     });
 
-    // Handle user events
+    // Handle user joined
     socket.on(WEBSOCKET_EVENTS.USER_JOINED, (user: User) => {
-      setUsers(prev => [...prev, user]);
+      setUsers((prev) => [...prev, user]);
     });
 
+    // Handle user left
     socket.on(WEBSOCKET_EVENTS.USER_LEFT, (userId: string) => {
-      setUsers(prev => prev.filter(u => u.id !== userId));
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
     });
 
     // Handle errors
