@@ -1,5 +1,4 @@
 // src/hooks/useWebSocket.ts
-
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 
@@ -14,49 +13,53 @@ export const useWebSocket = (roomId: string, userName: string) => {
       return;
     }
 
-    console.log('Initializing WebSocket:', {
-      url: SOCKET_URL,
-      roomId,
-      userName
-    });
+    try {
+      // Create socket instance if it doesn't exist
+      if (!socketRef.current) {
+        console.log('Creating new socket connection to:', SOCKET_URL);
+        socketRef.current = io(SOCKET_URL, {
+          transports: ['websocket', 'polling'], // Add polling as fallback
+          query: {
+            roomId,
+            userName
+          },
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          timeout: 10000,
+          autoConnect: true // Ensure auto connection is enabled
+        });
 
-    // Create socket instance
-    const socket = io(SOCKET_URL, {
-      transports: ['websocket'],
-      query: {
-        roomId,
-        userName
-      },
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 10000
-    });
+        const socket = socketRef.current;
 
-    // Connection event handlers
-    socket.on('connect', () => {
-      console.log('Socket connected:', socket.id);
-    });
+        socket.on('connect', () => {
+          console.log('Socket connected:', socket.id);
+        });
 
-    socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
-    });
+        socket.on('disconnect', (reason) => {
+          console.log('Socket disconnected:', reason);
+        });
 
-    socket.on('connect_error', (error) => {
-      console.error('Connection error:', error);
-    });
+        socket.on('connect_error', (error) => {
+          console.error('Connection error:', error);
+        });
 
-    socket.on('error', (error: Error) => {
-      console.error('Socket error:', error);
-    });
+        socket.on('error', (error: Error) => {
+          console.error('Socket error:', error);
+        });
 
-    // Store socket reference
-    socketRef.current = socket;
+        // Force connect if not already connecting
+        if (!socket.connected && !socket.connecting) {
+          socket.connect();
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing socket:', error);
+    }
 
-    // Cleanup on unmount
     return () => {
-      console.log('Cleaning up socket connection');
-      if (socket) {
-        socket.disconnect();
+      if (socketRef.current) {
+        console.log('Cleaning up socket connection');
+        socketRef.current.disconnect();
         socketRef.current = null;
       }
     };
