@@ -24,12 +24,23 @@ const useRoom = (roomId: string, userName: string = 'Anonymous') => {
 
     const handleRoomState = (roomData: Room) => {
       setRoom(roomData);
-      setUsers(roomData.users);
+      // Filter out duplicates by name
+      const uniqueUsers = roomData.users.reduce((acc: User[], user) => {
+        if (!acc.find(u => u.name === user.name)) {
+          acc.push(user);
+        }
+        return acc;
+      }, []);
+      setUsers(uniqueUsers);
       setIsConnecting(false);
     };
 
     const handleUserJoined = (user: User) => {
-      setUsers(prev => [...prev, user]);
+      setUsers(prev => {
+        // Remove any existing user with the same name
+        const filtered = prev.filter(u => u.name !== user.name);
+        return [...filtered, user];
+      });
     };
 
     const handleUserLeft = (userId: string) => {
@@ -45,15 +56,7 @@ const useRoom = (roomId: string, userName: string = 'Anonymous') => {
       setIsConnecting(false);
     });
 
-    const timeout = setTimeout(() => {
-      if (isConnecting) {
-        setError('Connection timed out');
-        setIsConnecting(false);
-      }
-    }, 5000);
-
     return () => {
-      clearTimeout(timeout);
       if (socket) {
         socket.off('connect', handleConnect);
         socket.off('room_state', handleRoomState);
@@ -62,7 +65,7 @@ const useRoom = (roomId: string, userName: string = 'Anonymous') => {
         socket.off('connect_error');
       }
     };
-  }, [socket, roomId, userName, isConnecting]);
+  }, [socket]);
 
   return { room, users, isConnecting, error };
 };

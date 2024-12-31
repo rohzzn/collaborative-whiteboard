@@ -84,15 +84,14 @@ io.on('connection', (socket: Socket) => {
  room.users = room.users.filter(u => u.name !== userName);
 
  const user: User = {
-   id: socket.id,
-   name: userName,
-   color: getRandomColor(),
-   isActive: true,
-   lastSeen: new Date(),
- };
-
- room.users.push(user);
- socket.join(roomId);
+  id: socket.id,
+  name: userName,
+  color: getRandomColor(),
+  isActive: true,
+  lastSeen: new Date(),
+};
+room.users.push(user);
+socket.join(roomId);
 
  socket.emit('room_state', room);
  io.to(roomId).emit('user_joined', user);
