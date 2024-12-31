@@ -1,167 +1,50 @@
 // src/hooks/useWhiteboard.ts
-import { useEffect, useCallback } from 'react';
-import { create } from 'zustand';
+import React from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { DrawingTool, Stroke, Point } from '@/types';
 import { DEFAULT_COLOR, DEFAULT_STROKE_WIDTH } from '@/lib/constants';
 import useWebSocket from './useWebSocket';
 
-interface WhiteboardState {
-  strokes: Stroke[];
-  currentStroke: Stroke | null;
-  tool: DrawingTool;
-  color: string;
-  strokeWidth: number;
-  isDrawing: boolean;
-  undoStack: Stroke[];
-  redoStack: Stroke[];
-}
-
-interface WhiteboardStore extends WhiteboardState {
-  setTool: (tool: DrawingTool) => void;
-  setColor: (color: string) => void;
-  setStrokeWidth: (width: number) => void;
-  startStroke: (point: Point) => void;
-  updateStroke: (point: Point) => void;
-  endStroke: () => void;
-  undo: () => void;
-  redo: () => void;
-  clear: () => void;
-  addStroke: (stroke: Stroke) => void;
-  setStrokes: (strokes: Stroke[]) => void;
-}
-
-const useWhiteboardStore = create<WhiteboardStore>((set, get) => ({
-  strokes: [],
-  currentStroke: null,
-  tool: 'pencil',
-  color: DEFAULT_COLOR,
-  strokeWidth: DEFAULT_STROKE_WIDTH,
-  isDrawing: false,
-  undoStack: [],
-  redoStack: [],
-
-  setTool: (tool) => set({ tool }),
-  setColor: (color) => set({ color }),
-  setStrokeWidth: (width) => set({ strokeWidth: width }),
-  setStrokes: (strokes) => set({ strokes }),
-
-  startStroke: (point) => {
-    const { tool, color, strokeWidth } = get();
-    const newStroke: Stroke = {
-      id: uuidv4(),
-      type: tool === 'eraser' ? 'eraser' : tool,
-      points: [point],
-      color: tool === 'eraser' ? '#FFFFFF' : color,
-      width: tool === 'eraser' ? strokeWidth * 2 : strokeWidth,
-    };
-    set({ currentStroke: newStroke, isDrawing: true });
-  },
-
-  updateStroke: (point) => {
-    const { currentStroke, isDrawing } = get();
-    if (!isDrawing || !currentStroke) return;
-
-    const updatedStroke = {
-      ...currentStroke,
-      points: [...currentStroke.points, point],
-    };
-    set({ currentStroke: updatedStroke });
-  },
-
-  endStroke: () => {
-    const { currentStroke, strokes } = get();
-    if (!currentStroke) return;
-
-    const completedStroke = { ...currentStroke };
-    set({
-      strokes: [...strokes, completedStroke],
-      currentStroke: null,
-      isDrawing: false,
-      undoStack: [],
-      redoStack: [],
-    });
-  },
-
-  addStroke: (stroke) => {
-    set((state) => ({
-      strokes: [...state.strokes, stroke],
-    }));
-  },
-
-  undo: () => {
-    const { strokes, undoStack } = get();
-    if (strokes.length === 0) return;
-
-    const lastStroke = strokes[strokes.length - 1];
-    set({
-      strokes: strokes.slice(0, -1),
-      undoStack: [...undoStack, lastStroke],
-    });
-  },
-
-  redo: () => {
-    const { strokes, undoStack } = get();
-    if (undoStack.length === 0) return;
-
-    const strokeToRedo = undoStack[undoStack.length - 1];
-    set({
-      strokes: [...strokes, strokeToRedo],
-      undoStack: undoStack.slice(0, -1),
-    });
-  },
-
-  clear: () => set({
-    strokes: [],
-    currentStroke: null,
-    undoStack: [],
-    redoStack: [],
-  }),
-}));
-
-const useWhiteboard = (roomId: string) => {
+export default function useWhiteboard(roomId: string) {
   const socket = useWebSocket(roomId, '');
-  const store = useWhiteboardStore();
+  const [strokes, setStrokes] = React.useState<Stroke[]>([]);
+  const [currentStroke, setCurrentStroke] = React.useState<Stroke | null>(null);
+  const [tool, setTool] = React.useState<DrawingTool>('pencil');
+  const [color, setColor] = React.useState(DEFAULT_COLOR);
+  const [strokeWidth, setStrokeWidth] = React.useState(DEFAULT_STROKE_WIDTH);
 
-  const emitStrokeStarted = useCallback((stroke: Stroke) => {
-    if (socket) {
-      socket.emit('stroke_started', stroke);
-    }
-  }, [socket]);
-
-  const emitStrokeUpdated = useCallback((stroke: Stroke) => {
-    if (socket) {
-      socket.emit('stroke_updated', stroke);
-    }
-  }, [socket]);
-
-  const emitStrokeCompleted = useCallback((stroke: Stroke) => {
-    if (socket) {
-      socket.emit('stroke_completed', stroke);
-    }
-  }, [socket]);
-
-  useEffect(() => {
+  React.useEffect(() => {
     if (!socket) return;
 
-    socket.on('room_state', (roomData) => {
-      store.setStrokes(roomData.strokes || []);
+    socket.on('room_state', (room) => {
+      if (room.strokes) {
+        console.log('Received room state with strokes:', room.strokes);
+        setStrokes(room.strokes);
+      }
     });
 
     socket.on('stroke_started', (stroke: Stroke) => {
-      store.startStroke(stroke.points[0]);
+      console.log('Received stroke_started:', stroke);
+      setStrokes(prev => [...prev, stroke]);
     });
 
     socket.on('stroke_updated', (stroke: Stroke) => {
-      const lastPoint = stroke.points[stroke.points.length - 1];
-      store.updateStroke(lastPoint);
+      console.log('Received stroke_updated:', stroke);
+      setStrokes(prev => prev.map(s => s.id === stroke.id ? stroke : s));
     });
 
     socket.on('stroke_completed', (stroke: Stroke) => {
-      store.addStroke(stroke);
+      console.log('Received stroke_completed:', stroke);
+      setStrokes(prev => [
+        ...prev.filter(s => s.id !== stroke.id),
+        stroke
+      ]);
     });
 
-    socket.on('canvas_cleared', store.clear);
+    socket.on('canvas_cleared', () => {
+      console.log('Received canvas_cleared');
+      setStrokes([]);
+    });
 
     return () => {
       socket.off('room_state');
@@ -170,49 +53,97 @@ const useWhiteboard = (roomId: string) => {
       socket.off('stroke_completed');
       socket.off('canvas_cleared');
     };
-  }, [socket, store]);
+  }, [socket]);
 
   const startStroke = (point: Point) => {
-    store.startStroke(point);
-    const currentStroke = store.currentStroke;
-    if (currentStroke) {
-      emitStrokeStarted(currentStroke);
+    const newStroke: Stroke = {
+      id: uuidv4(),
+      type: tool,
+      points: [point],
+      color: tool === 'eraser' ? '#FFFFFF' : color,
+      width: tool === 'eraser' ? strokeWidth * 2 : strokeWidth,
+    };
+
+    if (tool === 'text' && point.text) {
+      newStroke.text = point.text;
     }
+
+    setCurrentStroke(newStroke);
+    socket?.emit('stroke_started', newStroke);
   };
 
   const updateStroke = (point: Point) => {
-    store.updateStroke(point);
-    const currentStroke = store.currentStroke;
-    if (currentStroke) {
-      emitStrokeUpdated(currentStroke);
-    }
+    if (!currentStroke) return;
+
+    const updatedStroke = {
+      ...currentStroke,
+      points: [...currentStroke.points, point]
+    };
+
+    setCurrentStroke(updatedStroke);
+    socket?.emit('stroke_updated', updatedStroke);
   };
 
   const endStroke = () => {
-    const currentStroke = store.currentStroke;
-    if (currentStroke) {
-      store.endStroke();
-      emitStrokeCompleted(currentStroke);
-    }
+    if (!currentStroke) return;
+
+    const finalStroke = currentStroke;
+    setStrokes(prev => [...prev, finalStroke]);
+    setCurrentStroke(null);
+    socket?.emit('stroke_completed', finalStroke);
+  };
+
+  const drawShape = (points: Point[]) => {
+    if (points.length < 2) return;
+
+    const shape: Stroke = {
+      id: uuidv4(),
+      type: tool,
+      points,
+      color,
+      width: strokeWidth
+    };
+
+    setStrokes(prev => [...prev, shape]);
+    socket?.emit('stroke_completed', shape);
+  };
+
+  const addText = (point: Point, text: string) => {
+    const textStroke: Stroke = {
+      id: uuidv4(),
+      type: 'text',
+      points: [{ ...point, text }],
+      color,
+      width: strokeWidth,
+      text
+    };
+
+    setStrokes(prev => [...prev, textStroke]);
+    socket?.emit('stroke_completed', textStroke);
+  };
+
+  const clear = () => {
+    setStrokes([]);
+    setCurrentStroke(null);
+    socket?.emit('clear_canvas');
   };
 
   return {
-    strokes: store.strokes,
-    tool: store.tool,
-    color: store.color,
-    strokeWidth: store.strokeWidth,
-    canUndo: store.strokes.length > 0,
-    canRedo: store.undoStack.length > 0,
-    setTool: store.setTool,
-    setColor: store.setColor,
-    setStrokeWidth: store.setStrokeWidth,
+    strokes,
+    currentStroke,
+    tool,
+    color,
+    strokeWidth,
+    setTool,
+    setColor,
+    setStrokeWidth,
     startStroke,
     updateStroke,
     endStroke,
-    undo: store.undo,
-    redo: store.redo,
-    clear: store.clear,
+    drawShape,
+    addText,
+    clear,
+    canUndo: strokes.length > 0,
+    canRedo: false
   };
-};
-
-export default useWhiteboard;
+}

@@ -1,28 +1,22 @@
 // src/components/rooms/RoomClient.tsx
 'use client';
-// src/components/rooms/RoomClient.tsx
-import React, { useEffect } from 'react';
+
+import React from 'react';
 import { motion } from 'framer-motion';
 import useRoom from '@/hooks/useRoom';
 import useWhiteboard from '@/hooks/useWhiteboard';
 import useUser from '@/hooks/useUser';
 import Canvas from '@/components/whiteboard/Canvas';
 import Toolbar from '@/components/whiteboard/Toolbar';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { Point } from '@/types';
+import type { Point, User } from '@/types';
 
 interface RoomClientProps {
   roomId: string;
 }
 
-const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
+export default function RoomClient({ roomId }: RoomClientProps) {
   const { name: userName } = useUser();
   const { users, isConnecting, error } = useRoom(roomId, userName || 'Anonymous');
   const {
@@ -42,22 +36,13 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
     redo,
   } = useWhiteboard(roomId);
 
-  const handleStrokeStart = (point: Point) => {
-    startStroke(point);
-  };
+  const handleStrokeStart = (point: Point) => startStroke(point);
+  const handleStrokeUpdate = (point: Point) => updateStroke(point);
+  const handleStrokeComplete = () => endStroke();
 
-  const handleStrokeUpdate = (point: Point) => {
-    updateStroke(point);
-  };
-
-  const handleStrokeComplete = () => {
-    endStroke();
-  };
-  
   const handleExport = () => {
     const canvas = document.querySelector('canvas');
     if (!canvas) return;
-
     const dataUrl = canvas.toDataURL('image/png');
     const link = document.createElement('a');
     link.download = `whiteboard-${roomId}.png`;
@@ -66,11 +51,9 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
   };
 
   const handleShare = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url).then(
-      () => alert('Room URL copied to clipboard!'),
-      () => alert('Failed to copy URL.')
-    );
+    navigator.clipboard.writeText(window.location.href)
+      .then(() => alert('Room URL copied to clipboard!'))
+      .catch(() => alert('Failed to copy URL.'));
   };
 
   if (error) {
@@ -79,7 +62,7 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-red-500">Error</CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <p>{error}</p>
           </CardHeader>
         </Card>
       </div>
@@ -92,13 +75,8 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Connecting...</CardTitle>
-            <CardDescription>
-              Establishing connection to the whiteboard room...
-              <br />
-              Room ID: {roomId}
-              <br />
-              User Name: {userName || 'Anonymous'}
-            </CardDescription>
+            <p>Room ID: {roomId}</p>
+            <p>User: {userName || 'Anonymous'}</p>
           </CardHeader>
         </Card>
       </div>
@@ -128,7 +106,7 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
         </header>
 
         <main className="flex-1 relative overflow-hidden">
-          <motion.div
+          <motion.div 
             className="h-full w-full"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -153,11 +131,8 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
             </CardHeader>
             <CardContent>
               <ul className="space-y-2">
-                {users.map((user) => (
-                  <li
-                    key={user.id}
-                    className="flex items-center gap-2 text-sm"
-                  >
+                {users && users.map((user: User) => (
+                  <li key={user.id} className="flex items-center gap-2 text-sm">
                     <div
                       className="w-2 h-2 rounded-full"
                       style={{ backgroundColor: user.color }}
@@ -172,6 +147,4 @@ const RoomClient: React.FC<RoomClientProps> = ({ roomId }) => {
       </div>
     </TooltipProvider>
   );
-};
-
-export default RoomClient;
+}

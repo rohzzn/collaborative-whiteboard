@@ -1,71 +1,34 @@
 // server.ts
-import { Server, Socket } from 'socket.io';
-
-interface Point {
- x: number;
- y: number; 
- pressure?: number;
-}
-
-interface Stroke {
- id: string;
- type: 'pencil' | 'rectangle' | 'circle' | 'text' | 'arrow' | 'eraser';
- points: Point[];
- color: string;
- width: number;
- text?: string;
-}
-
-interface User {
- id: string;
- name: string;
- color: string;
- isActive: boolean;
- lastSeen: Date;
-}
-
-interface Room {
- id: string;
- name: string;
- users: User[];
- strokes: Stroke[];
- createdAt: Date;
- updatedAt: Date;
-}
+import { Server } from 'socket.io';
+import type { Room, User, Stroke } from './src/types';
 
 const io = new Server(3001, {
- cors: {
-   origin: process.env.NODE_ENV === 'production' 
-     ? 'https://your-production-url.com'
-     : 'http://localhost:3000',
-   methods: ['GET', 'POST'],
-   credentials: true,
- },
+  cors: {
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
 });
 
 const rooms = new Map<string, Room>();
 
 const getRandomColor = () => {
- const letters = '0123456789ABCDEF';
- let color = '#';
- for (let i = 0; i < 6; i++) {
-   color += letters[Math.floor(Math.random() * 16)];
- }
- return color;
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'];
+  return colors[Math.floor(Math.random() * colors.length)];
 };
 
-io.on('connection', (socket: Socket) => {
-  console.log('User connected:', socket.id);
+io.on('connection', (socket) => {
+  console.log('New connection:', socket.id);
 
   const roomId = socket.handshake.query.roomId as string;
-  const userName = socket.handshake.query.userName as string || `User-${socket.id.slice(0, 5)}`;
+  const userName = socket.handshake.query.userName as string;
 
-  if (!roomId) {
-    console.error('No room ID provided');
+  if (!roomId || !userName) {
     socket.disconnect();
     return;
   }
 
+  // Get or create room
   let room = rooms.get(roomId);
   if (!room) {
     room = {
@@ -79,9 +42,7 @@ io.on('connection', (socket: Socket) => {
     rooms.set(roomId, room);
   }
 
-  // Remove existing user with same name
-  room.users = room.users.filter(u => u.name !== userName);
-
+  // Add user to room
   const user: User = {
     id: socket.id,
     name: userName,
@@ -90,45 +51,61 @@ io.on('connection', (socket: Socket) => {
     lastSeen: new Date(),
   };
 
+  // Remove any existing user with the same name
+  room.users = room.users.filter(u => u.name !== userName);
   room.users.push(user);
   socket.join(roomId);
-  socket.emit('room_state', room);
-  io.to(roomId).emit('user_joined', user);
 
+  // Send current room state to the new user
+  console.log('Sending room state:', room);
+  socket.emit('room_state', room);
+
+  // Handle drawing events
   socket.on('stroke_started', (stroke: Stroke) => {
+    console.log('Stroke started:', stroke);
+    if (!room) return;
+    room.strokes.push(stroke);
     socket.to(roomId).emit('stroke_started', stroke);
   });
 
   socket.on('stroke_updated', (stroke: Stroke) => {
+    console.log('Stroke updated:', stroke);
+    if (!room) return;
+    const index = room.strokes.findIndex(s => s.id === stroke.id);
+    if (index !== -1) {
+      room.strokes[index] = stroke;
+    }
     socket.to(roomId).emit('stroke_updated', stroke);
   });
 
   socket.on('stroke_completed', (stroke: Stroke) => {
-    if (room) {
+    console.log('Stroke completed:', stroke);
+    if (!room) return;
+    const index = room.strokes.findIndex(s => s.id === stroke.id);
+    if (index !== -1) {
+      room.strokes[index] = stroke;
+    } else {
       room.strokes.push(stroke);
-      room.updatedAt = new Date();
-      socket.to(roomId).emit('stroke_completed', stroke);
     }
+    socket.to(roomId).emit('stroke_completed', stroke);
   });
 
   socket.on('clear_canvas', () => {
-    if (room) {
-      room.strokes = [];
-      room.updatedAt = new Date();
-      socket.to(roomId).emit('canvas_cleared');
-    }
+    console.log('Canvas cleared');
+    if (!room) return;
+    room.strokes = [];
+    socket.to(roomId).emit('canvas_cleared');
   });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
-    if (room) {
-      room.users = room.users.filter(u => u.id !== socket.id);
-      io.to(roomId).emit('user_left', socket.id);
-      
-      if (room.users.length === 0) {
-        rooms.delete(roomId);
-      }
+    if (!room) return;
+    
+    room.users = room.users.filter(u => u.id !== socket.id);
+    io.to(roomId).emit('room_state', room);
+    
+    if (room.users.length === 0) {
+      rooms.delete(roomId);
     }
   });
 });
-console.log('WebSocket server running on port 3001');
