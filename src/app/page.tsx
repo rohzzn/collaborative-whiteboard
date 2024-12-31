@@ -1,4 +1,4 @@
-
+// src/app/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -24,26 +24,34 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import useUser from '@/hooks/useUser'; // Import the user store
+import useUser from '@/hooks/useUser';
 
 export default function Home() {
   const router = useRouter();
-  const [roomId, setRoomId] = useState('');
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [userName, setUserName] = useState('');
-  const [isJoining, setIsJoining] = useState(false);
-  const { setName } = useUser(); // Destructure setName
+  const { setName } = useUser();
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userName.trim()) {
+      alert('Please enter your name');
+      return;
+    }
     const newRoomId = uuidv4();
+    setName(userName);
     router.push(`/rooms/${newRoomId}`);
   };
 
   const handleJoinRoom = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsJoining(true);
-    
-    if (roomId && userName) {
-      setName(userName); // Set the userName in the store
+    if (!userName.trim()) {
+      alert('Please enter your name');
+      return;
+    }
+    setName(userName);
+    const roomId = (e.target as any).roomId.value;
+    if (roomId) {
       router.push(`/rooms/${roomId}`);
     }
   };
@@ -57,7 +65,7 @@ export default function Home() {
     {
       icon: Users,
       title: 'Multi-User Support',
-      description: 'See whos currently active and their changes instantly.',
+      description: 'See who\'s currently active and their changes instantly.',
     },
     {
       icon: Share2,
@@ -82,9 +90,39 @@ export default function Home() {
             A real-time collaborative space for your team
           </p>
           <div className="flex justify-center gap-4">
-            <Button size="lg" onClick={handleCreateRoom}>
-              Create Room
-            </Button>
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="lg">Create Room</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <form onSubmit={handleCreateRoom}>
+                  <DialogHeader>
+                    <DialogTitle>Create a Room</DialogTitle>
+                    <DialogDescription>
+                      Enter your name to create a new whiteboard session.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="create-name">Your Name</Label>
+                      <Input
+                        id="create-name"
+                        value={userName}
+                        onChange={(e) => setUserName(e.target.value)}
+                        placeholder="Enter your name"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit">
+                      Create Room
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="outline" size="lg">
@@ -92,36 +130,37 @@ export default function Home() {
                 </Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Join a Room</DialogTitle>
-                  <DialogDescription>
-                    Enter the room ID to join an existing whiteboard session.
-                  </DialogDescription>
-                </DialogHeader>
                 <form onSubmit={handleJoinRoom}>
+                  <DialogHeader>
+                    <DialogTitle>Join a Room</DialogTitle>
+                    <DialogDescription>
+                      Enter the room ID and your name to join an existing session.
+                    </DialogDescription>
+                  </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                       <Label htmlFor="roomId">Room ID</Label>
                       <Input
                         id="roomId"
-                        value={roomId}
-                        onChange={(e) => setRoomId(e.target.value)}
+                        name="roomId"
                         placeholder="Enter room ID"
+                        required
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="name">Your Name</Label>
+                      <Label htmlFor="join-name">Your Name</Label>
                       <Input
-                        id="name"
+                        id="join-name"
                         value={userName}
                         onChange={(e) => setUserName(e.target.value)}
                         placeholder="Enter your name"
+                        required
                       />
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button type="submit" disabled={isJoining}>
-                      {isJoining ? 'Joining...' : 'Join Room'}
+                    <Button type="submit">
+                      Join Room
                     </Button>
                   </DialogFooter>
                 </form>

@@ -1,9 +1,9 @@
 // src/components/whiteboard/Canvas.tsx
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { DrawingTool, Point, Stroke } from '@/types';
 
-type Props = {
+interface Props {
   tool: DrawingTool;
   color: string;
   strokeWidth: number;
@@ -11,13 +11,22 @@ type Props = {
   onStrokeStart: (point: Point) => void;
   onStrokeUpdate: (point: Point) => void;
   onStrokeComplete: () => void;
-};
+}
 
-const Canvas = (props: Props) => {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = React.useState(false);
+const Canvas = ({
+  tool,
+  color,
+  strokeWidth,
+  strokes,
+  onStrokeStart,
+  onStrokeUpdate,
+  onStrokeComplete,
+}: Props) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [startPoint, setStartPoint] = useState<Point | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -35,12 +44,10 @@ const Canvas = (props: Props) => {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    return () => {
-      window.removeEventListener('resize', resizeCanvas);
-    };
+    return () => window.removeEventListener('resize', resizeCanvas);
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -48,29 +55,84 @@ const Canvas = (props: Props) => {
     if (!ctx) return;
 
     drawStrokes(ctx);
-  }, [props.strokes]);
+  }, [strokes]);
 
   const drawStrokes = (ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-    props.strokes.forEach(stroke => {
+    strokes.forEach(stroke => {
       if (stroke.points.length < 2) return;
 
       ctx.beginPath();
       ctx.strokeStyle = stroke.color;
+      ctx.fillStyle = stroke.color;
       ctx.lineWidth = stroke.width;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
-      const [first, ...rest] = stroke.points;
-      ctx.moveTo(first.x, first.y);
-      
-      rest.forEach(point => {
-        ctx.lineTo(point.x, point.y);
-      });
-      
-      ctx.stroke();
+      if (stroke.type === 'rectangle') {
+        const [start, end] = stroke.points;
+        const width = end.x - start.x;
+        const height = end.y - start.y;
+        ctx.strokeRect(start.x, start.y, width, height);
+      } else if (stroke.type === 'circle') {
+        const [start, end] = stroke.points;
+        const radius = Math.sqrt(
+          Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
+        );
+        ctx.beginPath();
+        ctx.arc(start.x, start.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (stroke.type === 'arrow') {
+        const [start, end] = stroke.points;
+        drawArrow(ctx, start, end, stroke.color, stroke.width);
+      } else if (stroke.type === 'text' && stroke.text) {
+        const [pos] = stroke.points;
+        ctx.font = `${stroke.width * 8}px Arial`;
+        ctx.fillStyle = stroke.color;
+        ctx.fillText(stroke.text, pos.x, pos.y);
+      } else {
+        // Default pencil/eraser stroke
+        const [first, ...rest] = stroke.points;
+        ctx.moveTo(first.x, first.y);
+        rest.forEach(point => ctx.lineTo(point.x, point.y));
+        ctx.stroke();
+      }
     });
+  };
+
+  const drawArrow = (
+    ctx: CanvasRenderingContext2D,
+    start: Point,
+    end: Point,
+    color: string,
+    width: number
+  ) => {
+    const headLen = 20
+    const angle = Math.atan2(end.y - start.y, end.x - start.x);
+
+    // Draw the main line
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.stroke();
+
+    // Draw the arrow head
+    ctx.beginPath();
+    ctx.moveTo(end.x, end.y);
+    ctx.lineTo(
+      end.x - headLen * Math.cos(angle - Math.PI / 6),
+      end.y - headLen * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.lineTo(
+      end.x - headLen * Math.cos(angle + Math.PI / 6),
+      end.y - headLen * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
   };
 
   const getPoint = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
@@ -84,27 +146,45 @@ const Canvas = (props: Props) => {
     };
   };
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const point = getPoint(e);
     setIsDrawing(true);
-    const point = getPoint(e);
-    props.onStrokeStart(point);
+    setStartPoint(point);
+    
+    if (tool === 'text') {
+      const text = prompt('Enter text:');
+      if (text) {
+        onStrokeStart({ ...point, text });
+        onStrokeComplete();
+      }
+    } else {
+      onStrokeStart(point);
+    }
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const point = getPoint(e);
-    props.onStrokeUpdate(point);
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !startPoint) return;
+
+    const currentPoint = getPoint(e);
+    if (tool === 'rectangle' || tool === 'circle' || tool === 'arrow') {
+      // For shapes, we only need the start and current point
+      onStrokeUpdate(currentPoint);
+    } else {
+      // For freehand drawing, add the point to the stroke
+      onStrokeUpdate(currentPoint);
+    }
   };
 
-  const stopDrawing = () => {
+  const handleMouseUp = () => {
     if (!isDrawing) return;
     setIsDrawing(false);
-    props.onStrokeComplete();
+    setStartPoint(null);
+    onStrokeComplete();
   };
 
   return (
     <motion.div 
-      className="relative w-full h-full"
+      className="w-full h-full"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
@@ -112,11 +192,11 @@ const Canvas = (props: Props) => {
       <canvas
         ref={canvasRef}
         className="w-full h-full touch-none bg-white"
-        style={{ cursor: props.tool === 'text' ? 'text' : 'crosshair' }}
-        onMouseDown={startDrawing}
-        onMouseMove={draw}
-        onMouseUp={stopDrawing}
-        onMouseLeave={stopDrawing}
+        style={{ cursor: tool === 'text' ? 'text' : 'crosshair' }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
       />
     </motion.div>
   );

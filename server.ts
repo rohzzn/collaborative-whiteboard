@@ -56,6 +56,9 @@ io.on('connection', (socket) => {
   room.users.push(user);
   socket.join(roomId);
 
+  // Notify other users
+  socket.to(roomId).emit('user_joined', user);
+
   // Send current room state to the new user
   console.log('Sending room state:', room);
   socket.emit('room_state', room);
@@ -103,9 +106,12 @@ io.on('connection', (socket) => {
     
     room.users = room.users.filter(u => u.id !== socket.id);
     io.to(roomId).emit('room_state', room);
+    socket.to(roomId).emit('user_left', socket.id);
     
     if (room.users.length === 0) {
       rooms.delete(roomId);
     }
   });
 });
+
+export default io;

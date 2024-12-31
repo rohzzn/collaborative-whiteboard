@@ -10,6 +10,7 @@ export default function useWebSocket(roomId: string, userName: string) {
   useEffect(() => {
     if (!roomId || !userName) return;
 
+    // Create socket connection
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       query: { roomId, userName },
@@ -22,6 +23,10 @@ export default function useWebSocket(roomId: string, userName: string) {
 
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
     });
 
     return () => {
